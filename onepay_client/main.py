@@ -20,6 +20,7 @@ class OnepayResponse:
         self.msg = msg
         self.data = data
 
+
 class OnepayException(Exception):
     def __init__(self, message: str, code: int):
         super()
@@ -234,6 +235,7 @@ class OnepayClient:
         )
         return PaymentIntent(**res.data)
 
-    def decode_webhook(self, payload: str, signature: str):
-        data = jwt.decode(payload, signature, algorithms=["HS256"])
-        return PaymentIntent(**data)
+
+def decode_webhook_payload(payload: str, signature: str):
+    data = jwt.decode(payload, signature, algorithms=["HS256"])
+    return PaymentIntent(**data)
