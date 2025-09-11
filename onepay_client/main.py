@@ -43,6 +43,8 @@ class PaymentIntent:
         payment_method: Optional[str],
         status: Literal["pending", "success", "failed", "processing", "refunded", "cancelled"],
         renew_id: Optional[str],
+        subscription_status: Optional[Literal["active", "inactive"]],
+        next_billing_date: Optional[datetime],
         provider_id: str,
         contact_id: str,
         merchant_id: str,
@@ -64,6 +66,8 @@ class PaymentIntent:
         self.payment_method = payment_method
         self.status = status
         self.renew_id = renew_id
+        self.subscription_status = subscription_status
+        self.next_billing_date = next_billing_date
         self.provider_id = provider_id
         self.contact_id = contact_id
         self.merchant_id = merchant_id
@@ -210,6 +214,7 @@ class OnepayClient:
         ip: str,
         user_agent: str,
         meta_data: Optional[Dict[str, Any]] = None,
+        recurring_conf: Optional[Dict[str, Any]] = None,
     ):
         data = {
             "contact_id": contact_id,
@@ -220,6 +225,7 @@ class OnepayClient:
             "ip": ip,
             "user_agent": user_agent,
             "meta_data": meta_data,
+            "recurring_conf": recurring_conf,
         }
         res = self.__request(
             method="POST",
