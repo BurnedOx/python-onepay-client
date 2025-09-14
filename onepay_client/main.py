@@ -83,9 +83,13 @@ class PaymentLink:
         self,
         payment_id: str,
         link: str,
+        recurring: bool,
+        payment_intent: Optional[PaymentIntent],
     ):
         self.payment_id = payment_id
         self.link = link
+        self.recurring = recurring
+        self.payment_intent = payment_intent
 
 
 class PaymentProvider:
@@ -232,7 +236,12 @@ class OnepayClient:
             endpoint="/v1/payments/intent",
             data=data,
         )
-        return PaymentLink(**res.data)
+        return PaymentLink(
+            **res.data,
+            payment_intent=PaymentIntent(
+                **res.data["payment_intent"]
+            ) if res.data.get("payment_intent") else None,
+        )
 
     def get_payment(self, payment_id: str):
         res = self.__request(
