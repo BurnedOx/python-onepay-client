@@ -201,10 +201,15 @@ class OnepayClient:
             data=data,
         )
 
-    def get_payment_providers(self, ip: str):
+    def get_payment_providers(self, ip: Optional[str] = None, country_code: Optional[str] = None):
+        endpoint = "/v1/payments/providers?"
+        if ip:
+            endpoint += f"ip={ip}&"
+        if country_code:
+            endpoint += f"country_code={country_code}&"
         res = self.__request(
             method="GET",
-            endpoint=f"/v1/payments/providers?ip={ip}",
+            endpoint=endpoint
         )
         return list(map(lambda x: PaymentProvider(**x), res.data))
 
@@ -217,6 +222,7 @@ class OnepayClient:
         return_url: str,
         ip: str,
         user_agent: str,
+        country_code: Optional[str] = None,
         meta_data: Optional[Dict[str, Any]] = None,
         recurring_conf: Optional[Dict[str, Any]] = None,
     ):
@@ -228,6 +234,7 @@ class OnepayClient:
             "return_url": return_url,
             "ip": ip,
             "user_agent": user_agent,
+            "country_code": country_code,
             "meta_data": meta_data,
             "recurring_conf": recurring_conf,
         }
