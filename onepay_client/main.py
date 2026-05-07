@@ -1,7 +1,7 @@
 import base64
 import hmac
 import hashlib
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 import jwt
 import requests
 from datetime import datetime
@@ -41,18 +41,20 @@ class PaymentIntent:
         currency: str,
         return_url: Optional[str],
         payment_method: Optional[str],
-        status: Literal["pending", "success", "failed", "processing", "refunded", "cancelled"],
+        status: Literal["created", "pending", "received", "success", "failed", "processing", "refunded", "cancelled"],
         renew_id: Optional[str],
-        subscription_status: Optional[Literal["active", "inactive"]],
-        next_billing_date: Optional[datetime],
-        provider_id: str,
-        contact_id: str,
-        merchant_id: str,
-        ip: Optional[str],
-        user_agent: Optional[str],
-        meta_data: Optional[Dict[str, Any]],
-        payment_intent: Optional[Dict[str, Any]],
-        logs: Optional[Dict[str, Any]],
+        plan_id: Optional[str] = None,
+        subscription_status: Optional[Literal["active", "inactive"]] = None,
+        next_billing_date: Optional[datetime] = None,
+        provider_id: str = "",
+        contact_id: str = "",
+        merchant_id: str = "",
+        ip: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        meta_data: Optional[Dict[str, Any]] = None,
+        payment_intent: Optional[Dict[str, Any]] = None,
+        logs: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ):
         self.id = id
         self.created_at = created_at
@@ -66,6 +68,7 @@ class PaymentIntent:
         self.payment_method = payment_method
         self.status = status
         self.renew_id = renew_id
+        self.plan_id = plan_id
         self.subscription_status = subscription_status
         self.next_billing_date = next_billing_date
         self.provider_id = provider_id
@@ -92,15 +95,25 @@ class PaymentLink:
         self.payment_intent = payment_intent
 
 
+class PaymentMethodInfo:
+    """Represents a payment method nested inside a PaymentProvider."""
+
+    def __init__(self, slug: str, logo: Optional[str] = None, **kwargs):
+        self.slug = slug
+        self.logo = logo
+
+
 class PaymentProvider:
     def __init__(
         self,
         id: str,
         name: str,
-        slug: Literal["stripe", "razorpay", "billdesk"],
+        slug: Literal["stripe", "razorpay", "billdesk", "xendit"],
         logo: Optional[str],
         description: Optional[str],
         is_recommended: bool,
+        payment_methods: Optional[List[dict]] = None,
+        **kwargs,
     ):
         self.id = id
         self.name = name
@@ -108,6 +121,9 @@ class PaymentProvider:
         self.logo = logo
         self.description = description
         self.is_recommended = is_recommended
+        self.payment_methods = [
+            PaymentMethodInfo(**pm) for pm in (payment_methods or [])
+        ]
 
 
 class OnepayClient:
@@ -144,6 +160,8 @@ class OnepayClient:
             raise OnepayException(res["msg"], res["code"]) from e
         except Exception as e:
             raise OnepayException("Unknown error", 500) from e
+
+    # ── Contacts ──────────────────────────────────────────────
 
     def create_contact(
         self,
@@ -201,7 +219,11 @@ class OnepayClient:
             data=data,
         )
 
-    def get_payment_providers(self, ip: Optional[str] = None, country_code: Optional[str] = None):
+    # ── Providers & Payment Methods ───────────────────────────
+
+    def get_payment_providers(
+        self, ip: Optional[str] = None, country_code: Optional[str] = None
+    ):
         endpoint = "/v1/payments/providers?"
         if ip:
             endpoint += f"ip={ip}&"
@@ -209,21 +231,42 @@ class OnepayClient:
             endpoint += f"country_code={country_code}&"
         res = self.__request(
             method="GET",
-            endpoint=endpoint
+            endpoint=endpoint,
         )
         return list(map(lambda x: PaymentProvider(**x), res.data))
+
+    def get_payment_methods(
+        self, ip: Optional[str] = None, country_code: Optional[str] = None
+    ):
+        """Retrieve supported payment methods for the merchant based on location."""
+        endpoint = "/v1/payments/methods?"
+        if ip:
+            endpoint += f"ip={ip}&"
+        if country_code:
+            endpoint += f"country_code={country_code}&"
+        res = self.__request(
+            method="GET",
+            endpoint=endpoint,
+        )
+        return res.data
+
+    # ── Payments ──────────────────────────────────────────────
 
     def create_payment(
         self,
         contact_id: str,
-        provider: Literal["stripe", "razorpay", "billdesk"],
+        provider: Literal["stripe", "razorpay", "billdesk", "xendit"],
         amount: float,
         currency: str,
         return_url: str,
         ip: str,
         user_agent: str,
+        payment_method: Optional[Literal["upi", "card", "netbanking", "wallet"]] = None,
         country_code: Optional[str] = None,
         meta_data: Optional[Dict[str, Any]] = None,
+        capture_mode: Optional[Literal["manual", "automatic"]] = None,
+        capture_expiry_period: Optional[int] = None,
+        refund_speed: Optional[Literal["normal", "optimum"]] = None,
         recurring_conf: Optional[Dict[str, Any]] = None,
     ):
         data = {
@@ -234,10 +277,21 @@ class OnepayClient:
             "return_url": return_url,
             "ip": ip,
             "user_agent": user_agent,
-            "country_code": country_code,
-            "meta_data": meta_data,
-            "recurring_conf": recurring_conf,
         }
+        if payment_method is not None:
+            data["payment_method"] = payment_method
+        if country_code is not None:
+            data["country_code"] = country_code
+        if meta_data is not None:
+            data["meta_data"] = meta_data
+        if capture_mode is not None:
+            data["capture_mode"] = capture_mode
+        if capture_expiry_period is not None:
+            data["capture_expiry_period"] = capture_expiry_period
+        if refund_speed is not None:
+            data["refund_speed"] = refund_speed
+        if recurring_conf is not None:
+            data["recurring_conf"] = recurring_conf
         res = self.__request(
             method="POST",
             endpoint="/v1/payments/intent",
@@ -256,6 +310,50 @@ class OnepayClient:
             endpoint=f"/v1/payments/intent/{payment_id}",
         )
         return PaymentIntent(**res.data)
+
+    def capture_payment(
+        self,
+        payment_id: str,
+        amount: Optional[float] = None,
+    ):
+        """Capture an authorized payment (manual capture mode)."""
+        data: Dict[str, Any] = {"payment_id": payment_id}
+        if amount is not None:
+            data["amount"] = amount
+        res = self.__request(
+            method="POST",
+            endpoint="/v1/payments/capture",
+            data=data,
+        )
+        return res.data
+
+    def refund_payment(
+        self,
+        payment_id: str,
+        amount: Optional[float] = None,
+        speed: Optional[Literal["normal", "optimum"]] = None,
+    ):
+        """Initiate a refund for a captured / successful payment."""
+        data: Dict[str, Any] = {"payment_id": payment_id}
+        if amount is not None:
+            data["amount"] = amount
+        if speed is not None:
+            data["speed"] = speed
+        res = self.__request(
+            method="POST",
+            endpoint="/v1/payments/refund",
+            data=data,
+        )
+        return res.data
+
+    def deactivate_subscription(self, payment_id: str):
+        """Deactivate a Xendit recurring subscription plan."""
+        res = self.__request(
+            method="POST",
+            endpoint="/v1/payments/subscription/plan/deactivate",
+            data={"payment_id": payment_id},
+        )
+        return res.data
 
 
 def decode_webhook_payload(payload: str, signature: str):
