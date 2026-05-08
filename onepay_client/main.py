@@ -297,11 +297,11 @@ class OnepayClient:
             endpoint="/v1/payments/intent",
             data=data,
         )
+        data = dict(res.data)
+        raw_intent = data.pop("payment_intent", None)
         return PaymentLink(
-            **res.data,
-            payment_intent=PaymentIntent(
-                **res.data["payment_intent"]
-            ) if res.data.get("payment_intent") else None,
+            **data,
+            payment_intent=PaymentIntent(**raw_intent) if raw_intent else None,
         )
 
     def get_payment(self, payment_id: str):

@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: onepay_client
+Version: 0.3.0
+Summary: Python client for OnePay API
+Home-page: https://github.com/BurnedOx/python-onepay-client.git
+Author: Mainak Debnath
+Author-email: mainak.debnath@icloud.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: requires-python
+Dynamic: summary
